@@ -183,7 +183,6 @@
     </div>
 
     <script>
-        // Wait for the entire page to be loaded before running any JavaScript
         document.addEventListener("DOMContentLoaded", () => {
             
             // --- DOM Elements ---
@@ -266,8 +265,19 @@
                     
                     chatMessages.removeChild(chatMessages.lastChild); // Remove "thinking"
                     if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+                    
+                    // --- NEW: Parse the JSON response ---
                     const data = await response.json();
+                    
+                    // Add the AI's reply
                     addMessage('bot', data.response);
+                    
+                    // Update the emotion status
+                    if (data.emotion) {
+                        updateEmotionStatus(data.emotion);
+                        addSystemMessage(`AI detected emotion from text: ${data.emotion}`);
+                    }
+
                 } catch (error) {
                     chatMessages.removeChild(chatMessages.lastChild); // Remove "thinking"
                     addSystemMessage(`Error sending message: ${error.message}`, 'error');

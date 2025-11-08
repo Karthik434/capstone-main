@@ -8,6 +8,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import requests 
 import traceback
+import json # <-- NEW: We need this to parse Gemini's response
 
 # --- Flask App Setup ---
 app = Flask(__name__)
@@ -20,12 +21,15 @@ CORS(app)
 ML_MODEL_PATH = 'ravdess_emotion_speaker_independent.keras'
 SCALER_PATH = 'feature_scaler.pkl'
 ENCODER_PATH = 'label_encoder.pkl'
-GEMINI_API_KEY = '' # <-- ⚠️ PASTE YOUR GEMINI API KEY HERE
+GEMINI_API_KEY = 'AIzaSyDaIPJTc4AgZHCfW4khsEyru207u-pqgxA' # <-- ⚠️ PASTE YOUR GEMINI API KEY HERE
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
 
 N_MELS = 128
 MAX_PAD_LEN = 300
 SR = 22050
+
+# --- NEW: Define the emotion list for both AI models ---
+EMOTION_LIST = ['neutral', 'calm', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised']
 
 try:
     print("Loading machine learning models...")
@@ -97,8 +101,6 @@ def upload_audio():
         print(f"Processing {filepath}...")
         features = extract_logmel_for_prediction(filepath)
         
-        # This will fail if the file is not a valid format (e.g., webm)
-        # This app now only supports formats librosa+soundfile can read (like WAV)
         if features is None:
             return jsonify({"error": "Could not process audio. Please upload a valid WAV file."}), 500
 
@@ -132,29 +134,37 @@ def upload_audio():
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
-    """Handles sending a chat message to the Gemini API"""
+    """
+    --- THIS FUNCTION IS UPDATED ---
+    Handles sending a chat message to the Gemini API.
+    It now ALSO analyzes the text for emotion.
+    """
     data = request.json
     user_message = data.get('message', '')
     
-    # Get the *CURRENT* emotion from the session
-    emotion = session.get('emotion', 'neutral') # Default to 'neutral' if not set
+    # Get the *previous* emotion (from audio) to use as context
+    last_emotion = session.get('emotion', 'neutral') 
 
-    # --- This is the key part: The System Prompt ---
-    # It dynamically uses the latest emotion detected
+    # --- NEW System Prompt ---
+    # This prompt asks Gemini to do two things at once
+    # and return a JSON object.
     system_prompt = f"""
-    You are an AI assistant. You are talking to a user.
-    The user's *current* emotional tone has been analyzed as: **{emotion}**.
+    You are an emotion-aware AI assistant.
+    Your task is to perform two actions in one response, formatted as a JSON object.
+
+    1.  **Analyze Emotion:** Read the user's text ("{user_message}") and determine their primary emotion. The emotion MUST be one of the following exact strings: {json.dumps(EMOTION_LIST)}.
+    2.  **Generate Reply:** Write a helpful and empathetic reply to the user's message.
     
-    If the emotion is 'sad', 'angry', or 'fearful', be extra empathetic, supportive, and gentle.
-    If the emotion is 'happy' or 'surprised', feel free to be more enthusiastic and match their energy.
-    If the emotion is 'neutral' or 'calm', just be your normal helpful self.
-    
-    Respond to the user's message below.
+    For context, the user's last detected *audio* tone was **{last_emotion}**.
+    Use this as context, but prioritize the emotion in their *current text message* for your analysis.
+
+    Return *only* a valid JSON object matching this schema:
+    {{"type": "OBJECT", "properties": {{"emotion": {{"type": "STRING"}}, "reply": {{"type": "STRING"}}}}}}
     """
     
-    # --- Call the Gemini API ---
+    # --- NEW Payload with JSON Schema ---
     if not GEMINI_API_KEY:
-        return jsonify({"response": "Error: Gemini API key is not set in the backend."})
+        return jsonify({"response": "Error: Gemini API key is not set in the backend.", "emotion": last_emotion})
 
     try:
         payload = {
@@ -163,29 +173,55 @@ def send_message():
             }],
             "systemInstruction": {
                 "parts": [{"text": system_prompt}]
+            },
+            # --- NEW: This forces Gemini to reply in JSON ---
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseSchema": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "emotion": {"type": "STRING"},
+                        "reply": {"type": "STRING"}
+                    },
+                    "required": ["emotion", "reply"]
+                }
             }
         }
         
         headers = {'Content-Type': 'application/json'}
         response = requests.post(GEMINI_API_URL, headers=headers, json=payload, timeout=20)
         
-        response.raise_for_status() # Raise an error for bad responses (4xx or 5xx)
+        response.raise_for_status() 
         
         result = response.json()
         
-        if 'candidates' in result and result['candidates'][0]['content']['parts'][0]['text']:
-            ai_response = result['candidates'][0]['content']['parts'][0]['text']
-        else:
-            ai_response = "Sorry, I couldn't get a response. (Empty candidate)"
+        if 'candidates' not in result or not result['candidates'][0]['content']['parts'][0]['text']:
+            raise Exception("Invalid response from Gemini: No candidates found.")
 
-    except requests.exceptions.RequestException as e:
-        print(f"Gemini API Error: {e}")
-        ai_response = f"Sorry, I encountered an error calling the AI. (Error: {e})"
+        # --- NEW: Parse the JSON response ---
+        json_text = result['candidates'][0]['content']['parts'][0]['text']
+        data = json.loads(json_text)
+        
+        ai_reply = data.get('reply', "Sorry, I couldn't formulate a reply.")
+        new_emotion = data.get('emotion', 'neutral').lower()
+
+        # Ensure emotion is valid, default to neutral
+        if new_emotion not in EMOTION_LIST:
+            new_emotion = 'neutral'
+            
+        # --- NEW: Update the session with the emotion from the text ---
+        session['emotion'] = new_emotion
+
+        # --- NEW: Send both the reply and the new emotion back ---
+        return jsonify({"response": ai_reply, "emotion": new_emotion})
+
+    except json.JSONDecodeError as e:
+        print(f"Gemini API Error: Failed to decode JSON. Response text: {json_text}")
+        return jsonify({"response": "Sorry, I received an invalid response from the AI.", "emotion": last_emotion})
     except Exception as e:
-        print(f"Error processing Gemini response: {e}")
-        ai_response = f"Sorry, I encountered an error. ({e})"
-
-    return jsonify({"response": ai_response})
+        print(f"Error in send_message: {e}")
+        traceback.print_exc()
+        return jsonify({"response": f"Sorry, I encountered an error. ({e})", "emotion": last_emotion})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
