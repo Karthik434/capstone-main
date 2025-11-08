@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion-Aware Chat</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #f1f1f1;
+            --primary-color: #007bff;
+            --primary-hover: #0056b3;
+            --user-msg-bg: #004a99;
+            --bot-msg-bg: #333;
+            --border-color: #444;
+            --status-bg: #222;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+            --neutral-color: #6c757d;
+            --happy-color: #ffc107;
+            --sad-color: #17a2b8;
+            --angry-color: #dc3545;
+            --fearful-color: #6f42c1;
+            --calm-color: #20c997;
+            --disgust-color: #fd7e14;
+            --surprised-color: #ffc107;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        .chat-container {
+            width: 100%;
+            max-width: 700px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #252525;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        .status-bar {
+            padding: 15px 20px;
+            background-color: var(--status-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9em;
+        }
+        .status-light {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background-color: var(--neutral-color);
+            transition: background-color 0.3s ease;
+        }
+        #emotion-status {
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .message {
+            max-width: 80%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        .message.user {
+            background-color: var(--user-msg-bg);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .message.bot {
+            background-color: var(--bot-msg-bg);
+            color: var(--text-color);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .message.system {
+            align-self: center;
+            font-size: 0.85em;
+            color: #aaa;
+            background-color: var(--status-bg);
+            padding: 8px 12px;
+        }
+        .chat-input-area {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border-color);
+            background-color: var(--status-bg);
+            display: flex;
+            gap: 10px;
+        }
+        #message-input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            background-color: #333;
+            color: var(--text-color);
+            font-size: 1em;
+        }
+        #message-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        .icon-button {
+            padding: 10px;
+            background-color: var(--bot-msg-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            transition: background-color 0.2s;
+        }
+        .icon-button:hover {
+            background-color: #444;
+        }
+        .icon-button svg {
+            width: 20px;
+            height: 20px;
+        }
+        #file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        
+        <div class="status-bar">
+            <span>Emotion-Aware AI</span>
+            <div id="emotion-status">
+                <span id="status-light" class="status-light"></span>
+                <span>Current Tone: <strong id="emotion-text">neutral</strong></span>
+            </div>
+        </div>
+
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot">
+                Hi! I'm an emotion-aware assistant. You can chat with me, or upload an audio file (like a .wav) to update my understanding of your emotional tone.
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <input type="text" id="message-input" placeholder="Type a message or upload audio...">
+            
+            <button class="icon-button" id="send-button" title="Send Message">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" /></svg>
+            </button>
+            
+            <input type="file" id="file-input" accept="audio/*">
+            <button class="icon-button" id="upload-button" title="Upload Audio File">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M18.75 1.5c-3.04 0-5.5 2.46-5.5 5.5v1.18c-.4.13-.78.3-.1.15.5-.07.98-.15 1.45-.15 1.9 0 3.6.78 4.86 2.05l1.9-1.9c-.31-.3-.65-.58-1-.83V7c0-2.2-1.8-4-4-4s-4 1.8-4 4v7.5c0 1.9-1.58 3.5-3.5 3.5S4 16.4 4 14.5V4.53c-.4.1-.78.22-1.15.37L1.1 3.15C2.12 2.18 3.5 1.5 5 1.5c3.04 0 5.5 2.46 5.5 5.5v7.5c0 .28.22.5.5.5s.5-.22.5-.5V7c0-2.2 1.8-4 4-4s4 1.8 4 4v10.18c.4.13.78.3 1.15.5l1.75-1.75c-1-1-2.38-1.68-3.9-1.68-1.5 0-2.85.58-3.86 1.5l-1.9-1.9c1.27-1.27 2.96-2.05 4.86-2.05s3.6.78 4.86 2.05l1.9-1.9c-.3-.3-.63-.58-1-.83V7c0-3.04-2.46-5.5-5.5-5.5z" /></svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Wait for the entire page to be loaded before running any JavaScript
+        document.addEventListener("DOMContentLoaded", () => {
+            
+            // --- DOM Elements ---
+            const chatMessages = document.getElementById('chat-messages');
+            const messageInput = document.getElementById('message-input');
+            const sendButton = document.getElementById('send-button');
+            const uploadButton = document.getElementById('upload-button');
+            const fileInput = document.getElementById('file-input');
+            const emotionStatusLight = document.getElementById('status-light');
+            const emotionStatusText = document.getElementById('emotion-text');
+
+            // --- Emotion Colors ---
+            const emotionColors = {
+                'neutral': 'var(--neutral-color)',
+                'calm': 'var(--calm-color)',
+                'happy': 'var(--happy-color)',
+                'sad': 'var(--sad-color)',
+                'angry': 'var(--angry-color)',
+                'fearful': 'var(--fearful-color)',
+                'disgust': 'var(--disgust-color)',
+                'surprised': 'var(--surprised-color)',
+            };
+
+            // --- Event Listeners ---
+            sendButton.addEventListener('click', sendTextMessage);
+            messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') sendTextMessage();
+            });
+            uploadButton.addEventListener('click', () => fileInput.click());
+            
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    addSystemMessage('File selected: ' + file.name + '. Uploading...');
+                    uploadAudioFile(file, file.name);
+                }
+            });
+            
+            // --- Core Functions ---
+            function addMessage(sender, text) {
+                const messageEl = document.createElement('div');
+                messageEl.classList.add('message', sender);
+                messageEl.textContent = text;
+                chatMessages.appendChild(messageEl);
+                chatMessages.scrollTop = chatMessages.scrollHeight; // Auto-scroll
+            }
+
+            function addSystemMessage(text, type = 'normal') {
+                const messageEl = document.createElement('div');
+                messageEl.classList.add('message', 'system');
+                messageEl.textContent = text;
+                if (type === 'error') {
+                    messageEl.style.backgroundColor = 'var(--error-color)';
+                    messageEl.style.color = 'white';
+                }
+                chatMessages.appendChild(messageEl);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function updateEmotionStatus(emotion) {
+                const newEmotion = emotion.toLowerCase();
+                emotionStatusText.textContent = newEmotion;
+                emotionStatusLight.style.backgroundColor = emotionColors[newEmotion] || 'var(--neutral-color)';
+            }
+
+            // --- Text Message ---
+            async function sendTextMessage() {
+                const message = messageInput.value.trim();
+                if (!message) return;
+                addMessage('user', message);
+                messageInput.value = '';
+                addSystemMessage('AI is thinking...');
+
+                try {
+                    const response = await fetch('/send_message', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: message })
+                    });
+                    
+                    chatMessages.removeChild(chatMessages.lastChild); // Remove "thinking"
+                    if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+                    const data = await response.json();
+                    addMessage('bot', data.response);
+                } catch (error) {
+                    chatMessages.removeChild(chatMessages.lastChild); // Remove "thinking"
+                    addSystemMessage(`Error sending message: ${error.message}`, 'error');
+                }
+            }
+            
+            // --- Audio Upload ---
+            async function uploadAudioFile(file, filename) {
+                const formData = new FormData();
+                formData.append('file', file, filename);
+
+                try {
+                    const response = await fetch('/upload_audio', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Server error: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    if (data.success) {
+                        addSystemMessage(`Audio processed. New emotion detected: ${data.emotion}`, 'success');
+                        updateEmotionStatus(data.emotion);
+                    } else {
+                        throw new Error(data.error);
+                    }
+
+                } catch (error) {
+                    addSystemMessage(`Error uploading audio: ${error.message}`, 'error');
+                }
+            }
+            
+        }); // --- End of DOMContentLoaded ---
+
+    </script>
+</body>
+</html>
