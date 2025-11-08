@@ -21,7 +21,7 @@ CORS(app)
 ML_MODEL_PATH = 'ravdess_emotion_speaker_independent.keras'
 SCALER_PATH = 'feature_scaler.pkl'
 ENCODER_PATH = 'label_encoder.pkl'
-GEMINI_API_KEY = 'AIzaSyDaIPJTc4AgZHCfW4khsEyru207u-pqgxA' # <-- ⚠️ PASTE YOUR GEMINI API KEY HERE
+GEMINI_API_KEY = '' # <-- ⚠️ PASTE YOUR GEMINI API KEY HERE
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
 
 N_MELS = 128
